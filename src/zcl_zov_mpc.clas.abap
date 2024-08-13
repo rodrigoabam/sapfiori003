@@ -540,8 +540,8 @@ lo_entity_type = model->create_entity_type( iv_entity_type_name = 'OV_Item' iv_d
 *Properties
 ***********************************************************************************************************************************
 
-lo_property = lo_entity_type->create_property( iv_property_name = 'OrderId' iv_abap_fieldname = 'ORDERID' ). "#EC NOTEXT
-lo_property->set_label_from_text_element( iv_text_element_symbol = '031' iv_text_element_container = gc_incl_name ).  "#EC NOTEXT
+lo_property = lo_entity_type->create_property( iv_property_name = 'OrderID' iv_abap_fieldname = 'ORDERID' ). "#EC NOTEXT
+lo_property->set_label_from_text_element( iv_text_element_symbol = '034' iv_text_element_container = gc_incl_name ).  "#EC NOTEXT
 lo_property->set_is_key( ).
 lo_property->set_type_edm_int32( ).
 lo_property->set_creatable( abap_false ).
@@ -663,7 +663,7 @@ lo_entity_set->set_filter_required( abap_false ).
 *&---------------------------------------------------------------------*
 
 
-  CONSTANTS: lc_gen_date_time TYPE timestamp VALUE '20240809191753'.                  "#EC NOTEXT
+  CONSTANTS: lc_gen_date_time TYPE timestamp VALUE '20240813125513'.                  "#EC NOTEXT
   rv_last_modified = super->get_last_modified( ).
   IF rv_last_modified LT lc_gen_date_time.
     rv_last_modified = lc_gen_date_time.
@@ -851,11 +851,11 @@ APPEND ls_text_element TO rt_text_elements.
 
 
 clear ls_text_element.
-ls_text_element-artifact_name          = 'OrderId'.                 "#EC NOTEXT
+ls_text_element-artifact_name          = 'OrderID'.                 "#EC NOTEXT
 ls_text_element-artifact_type          = 'PROP'.                                       "#EC NOTEXT
 ls_text_element-parent_artifact_name   = 'OV_Item'.                            "#EC NOTEXT
 ls_text_element-parent_artifact_type   = 'ETYP'.                                       "#EC NOTEXT
-ls_text_element-text_symbol            = '031'.              "#EC NOTEXT
+ls_text_element-text_symbol            = '034'.              "#EC NOTEXT
 APPEND ls_text_element TO rt_text_elements.
 clear ls_text_element.
 ls_text_element-artifact_name          = 'ItemId'.                 "#EC NOTEXT
@@ -935,7 +935,7 @@ lo_nav_property   type ref to /iwbep/if_mgw_odata_nav_prop.                     
                             iv_def_assoc_set    = abap_false ). "#EC NOTEXT
 * Referential constraint for association - HeaderItem
 lo_ref_constraint = lo_association->create_ref_constraint( ).
-lo_ref_constraint->add_property( iv_principal_property = 'OrderID'   iv_dependent_property = 'OrderId' ). "#EC NOTEXT
+lo_ref_constraint->add_property( iv_principal_property = 'OrderID'   iv_dependent_property = 'OrderID' ). "#EC NOTEXT
 lo_assoc_set = model->create_association_set( iv_association_set_name  = 'HeaderItemSet'                         "#EC NOTEXT
                                               iv_left_entity_set_name  = 'HEADER_OVSet'              "#EC NOTEXT
                                               iv_right_entity_set_name = 'OV_ItemSet'             "#EC NOTEXT
