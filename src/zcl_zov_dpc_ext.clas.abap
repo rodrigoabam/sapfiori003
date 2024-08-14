@@ -149,9 +149,29 @@ CLASS ZCL_ZOV_DPC_EXT IMPLEMENTATION.
   DATA: ls_header       TYPE zovheader.
   DATA: ls_entityset LIKE LINE OF et_entityset.
 
+  DATA: lt_orderby   TYPE STANDARD TABLE OF string.
+  DATA: ld_orderby   TYPE string.
+
+  LOOP AT it_order INTO DATA(ls_order).
+    TRANSLATE ls_order-property TO UPPER CASE.
+    TRANSLATE ls_order-order TO UPPER CASE.
+    IF ls_order-order = 'DESC'.
+      ls_order-order = 'DESCENDING'.
+    ELSE.
+      ls_order-order = 'ASCENDING'.
+    ENDIF.
+    APPEND |{ ls_order-property } { ls_order-order }|
+        TO lt_orderby.
+  ENDLOOP.
+  CONCATENATE LINES OF lt_orderby INTO ld_orderby SEPARATED BY ''.
+
   SELECT *
-    INTO TABLE lt_header
-    FROM zovheader.
+    FROM zovheader
+    WHERE (IV_FILTER_STRING)
+    ORDER BY (ld_orderby)
+    INTO TABLE @lt_header
+    UP TO @is_paging-top ROWS
+    OFFSET @is_paging-skip.
 
   LOOP AT lt_header INTO ls_header.
     CLEAR ls_entityset.
