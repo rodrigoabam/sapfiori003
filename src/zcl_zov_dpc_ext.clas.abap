@@ -91,6 +91,56 @@ CLASS ZCL_ZOV_DPC_EXT IMPLEMENTATION.
 
 
   method HEADER_OVSET_DELETE_ENTITY.
+    DATA: ls_key_tab LIKE LINE OF it_key_tab.
+
+    DATA(lo_msg) = me->/iwbep/if_mgw_conv_srv_runtime~get_message_container( ).
+
+    READ TABLE it_key_tab INTO ls_key_tab WITH KEY name = 'OrderID'.
+    IF sy-subrc <> 0.
+      lo_msg->add_message_text_only(
+        EXPORTING
+          iv_msg_type = 'E'
+          iv_msg_text = 'OrderID não informado'
+      ).
+
+      RAISE EXCEPTION type /iwbep/cx_mgw_busi_exception
+        EXPORTING
+          message_container = lo_msg.
+    ENDIF.
+
+    DELETE FROM zovitem WHERE orderid = ls_key_tab-value.
+    " Vinicius 28/04/2024 - Comentando validação pois algumas ordens podem
+    " não tem itens
+    IF sy-subrc <> 0.
+      ROLLBACK WORK.
+
+      lo_msg->add_message_text_only(
+        EXPORTING
+          iv_msg_type = 'E'
+          iv_msg_text = 'Erro ao remover itens'
+      ).
+
+      RAISE EXCEPTION type /iwbep/cx_mgw_busi_exception
+        EXPORTING
+          message_container = lo_msg.
+    ENDIF.
+
+    DELETE FROM zovheader WHERE orderid = ls_key_tab-value.
+    IF sy-subrc <> 0.
+      ROLLBACK WORK.
+
+      lo_msg->add_message_text_only(
+        EXPORTING
+          iv_msg_type = 'E'
+          iv_msg_text = 'Erro ao remover ordem'
+      ).
+
+      RAISE EXCEPTION type /iwbep/cx_mgw_busi_exception
+        EXPORTING
+          message_container = lo_msg.
+    ENDIF.
+
+    COMMIT WORK AND WAIT.
   endmethod.
 
 
@@ -282,6 +332,28 @@ CLASS ZCL_ZOV_DPC_EXT IMPLEMENTATION.
 
 
   method OV_ITEMSET_DELETE_ENTITY.
+    DATA: ls_item    TYPE zovitem.
+    DATA: ls_key_tab LIKE LINE OF it_key_tab.
+
+    DATA(lo_msg) = me->/iwbep/if_mgw_conv_srv_runtime~get_message_container( ).
+
+    ls_item-orderid = it_key_tab[ name = 'OrderID' ]-value.
+    ls_item-itemid  = it_key_tab[ name = 'ItemId' ]-value.
+
+    DELETE FROM zovitem
+     WHERE orderid = ls_item-orderid
+       AND itemid  = ls_item-itemid.
+    IF sy-subrc <> 0.
+      lo_msg->add_message_text_only(
+        EXPORTING
+          iv_msg_type = 'E'
+          iv_msg_text = 'Erro ao remover item'
+      ).
+
+      RAISE EXCEPTION type /iwbep/cx_mgw_busi_exception
+        EXPORTING
+          message_container = lo_msg.
+  ENDIF.
   endmethod.
 
 
