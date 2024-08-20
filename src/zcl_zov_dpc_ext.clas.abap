@@ -4,6 +4,9 @@ class ZCL_ZOV_DPC_EXT definition
   create public .
 
 public section.
+
+  methods /IWBEP/IF_MGW_APPL_SRV_RUNTIME~CREATE_DEEP_ENTITY
+    redefinition .
 protected section.
 
   methods HEADER_OVSET_CREATE_ENTITY
@@ -32,9 +35,9 @@ protected section.
     redefinition .
   methods OV_ITEMSET_GET_ENTITY
     redefinition .
-  methods OV_ITEMSET_UPDATE_ENTITY
-    redefinition .
   methods OV_ITEMSET_GET_ENTITYSET
+    redefinition .
+  methods OV_ITEMSET_UPDATE_ENTITY
     redefinition .
 private section.
 ENDCLASS.
@@ -472,5 +475,142 @@ DATA(lo_msg) = me->/iwbep/if_mgw_conv_srv_runtime~get_message_container( ).
       EXPORTING
         message_container = lo_msg.
   ENDIF.
+  endmethod.
+
+
+method /IWBEP/IF_MGW_APPL_SRV_RUNTIME~CREATE_DEEP_ENTITY.
+    DATA : ls_deep_entity  TYPE zcl_zov_mpc_ext=>ty_order_item.
+    DATA : ls_deep_item    TYPE zcl_zov_mpc_ext=>ts_ov_item.
+
+    DATA : ls_header          TYPE zovheader.
+    DATA : lt_item         TYPE STANDARD TABLE OF zovitem.
+    DATA : ls_item         TYPE zovitem.
+    DATA : ld_updkz        TYPE char1.
+    DATA : ld_datahora(14) TYPE c.
+
+    DATA(lo_msg) = me->/iwbep/if_mgw_conv_srv_runtime~get_message_container( ).
+
+    CALL METHOD io_data_provider->read_entry_data
+      IMPORTING
+        es_data = ls_deep_entity.
+
+    " cabeçalho
+    IF ls_deep_entity-orderid = 0.
+      ld_updkz = 'I'.
+
+      MOVE-CORRESPONDING ls_deep_entity TO ls_header.
+
+      "ls_cab-criacao_data    = sy-datum.
+      "ls_cab-criacao_hora    = sy-uzeit.
+      "ls_cab-criacao_usuario = sy-uname.
+
+      ld_datahora            = ls_deep_entity-datacriacao.
+      ls_header-criacao_data    = ld_datahora(8).
+      ls_header-criacao_hora    = ld_datahora+8(6).
+      ls_header-criacao_user     = ls_deep_entity-criadopor.
+
+      SELECT SINGLE MAX( orderid )
+        INTO ls_header-orderid
+        FROM zovheader.
+
+      ls_header-orderid = ls_header-orderid + 1.
+    ELSE.
+      ld_updkz = 'U'.
+
+      " carregando dados atuais
+      SELECT SINGLE *
+        INTO ls_header
+        FROM zovheader
+       WHERE orderid = ls_deep_entity-orderid.
+
+      ls_header-clientid  = ls_deep_entity-clientid.
+      ls_header-status     = ls_deep_entity-status.
+      ls_header-totalitens = ls_deep_entity-totalitens.
+      ls_header-totalfrete = ls_deep_entity-totalfrete.
+      ls_header-totalorder = ls_header-totalitens + ls_header-totalfrete.
+    ENDIF.
+
+    " item
+    LOOP AT ls_deep_entity-toovitem INTO ls_deep_item.
+      MOVE-CORRESPONDING ls_deep_item TO ls_item.
+
+      ls_item-orderid = ls_header-orderid.
+      APPEND ls_item TO lt_item.
+    ENDLOOP.
+
+    " persistência cabeçalho
+    IF ld_updkz = 'I'.
+      INSERT zovheader FROM ls_header.
+      IF sy-subrc <> 0.
+        ROLLBACK WORK.
+
+        lo_msg->add_message_text_only(
+          EXPORTING
+            iv_msg_type = 'E'
+            iv_msg_text = 'Erro ao inserir ordem'
+        ).
+
+        RAISE EXCEPTION type /iwbep/cx_mgw_busi_exception
+          EXPORTING
+            message_container = lo_msg.
+      ENDIF.
+    ELSE.
+      MODIFY zovheader FROM ls_header.
+      IF sy-subrc <> 0.
+        ROLLBACK WORK.
+
+        lo_msg->add_message_text_only(
+          EXPORTING
+            iv_msg_type = 'E'
+            iv_msg_text = 'Erro ao atualizar ordem'
+        ).
+
+        RAISE EXCEPTION type /iwbep/cx_mgw_busi_exception
+          EXPORTING
+            message_container = lo_msg.
+      ENDIF.
+    ENDIF.
+
+    " persistência itens
+    DELETE FROM zovitem WHERE orderid = ls_header-orderid.
+    IF lines( lt_item ) > 0.
+      INSERT zovitem FROM TABLE lt_item.
+      IF sy-subrc <> 0.
+        ROLLBACK WORK.
+
+        lo_msg->add_message_text_only(
+          EXPORTING
+            iv_msg_type = 'E'
+            iv_msg_text = 'Erro ao inserir itens'
+        ).
+
+        RAISE EXCEPTION type /iwbep/cx_mgw_busi_exception
+          EXPORTING
+            message_container = lo_msg.
+      ENDIF.
+    ENDIF.
+
+    COMMIT WORK AND WAIT.
+
+    " atualizando deep entity de retorno
+
+    " cabeçalho
+    ls_deep_entity-orderid = ls_header-orderid.
+    CONVERT DATE ls_header-criacao_data
+            TIME ls_header-criacao_hora
+            INTO TIME STAMP ls_deep_entity-datacriacao
+            TIME ZONE 'UTC'. "sy-zonlo.
+
+    " item
+    LOOP AT ls_deep_entity-toovitem ASSIGNING FIELD-SYMBOL(<ls_deep_item>).
+      <ls_deep_item>-orderid = ls_header-orderid.
+    ENDLOOP.
+
+    CALL METHOD me->copy_data_to_ref
+      EXPORTING
+        is_data = ls_deep_entity
+      CHANGING
+        cr_data = er_deep_entity.
+
   endmethod.
 ENDCLASS.
