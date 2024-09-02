@@ -7,6 +7,8 @@ public section.
 
   methods /IWBEP/IF_MGW_APPL_SRV_RUNTIME~CREATE_DEEP_ENTITY
     redefinition .
+  methods /IWBEP/IF_MGW_APPL_SRV_RUNTIME~EXECUTE_ACTION
+    redefinition .
 protected section.
 
   methods HEADER_OVSET_CREATE_ENTITY
@@ -128,6 +130,8 @@ CLASS ZCL_ZOV_DPC_EXT IMPLEMENTATION.
           message_container = lo_msg.
     ENDIF.
 
+    DELETE FROM zovitem WHERE orderid = ls_key_tab-value.
+
     DELETE FROM zovheader WHERE orderid = ls_key_tab-value.
     IF sy-subrc <> 0.
       ROLLBACK WORK.
@@ -247,34 +251,65 @@ CLASS ZCL_ZOV_DPC_EXT IMPLEMENTATION.
 
 
   method HEADER_OVSET_UPDATE_ENTITY.
-    DATA(lo_msg) = me->/iwbep/if_mgw_conv_srv_runtime~get_message_container( ).
+    DATA: ld_error TYPE flag.
 
-    io_data_provider->read_entry_data(
-      IMPORTING
-        es_data = er_entity
-    ).
+      DATA(lo_msg) = me->/iwbep/if_mgw_conv_srv_runtime~get_message_container( ).
 
-    er_entity-orderid  = it_key_tab[ name = 'OrderID' ]-value.
-
-    UPDATE zovheader
-       SET clientid   = er_entity-clientid
-           totalitens = er_entity-totalitens
-           totalfrete = er_entity-totalfrete
-           totalorder = er_entity-totalorder
-           status     = er_entity-status
-     WHERE orderid    = er_entity-orderid.
-
-    IF sy-subrc <> 0.
-      lo_msg->add_message_text_only(
-        EXPORTING
-          iv_msg_type = 'E'
-          iv_msg_text = 'Erro ao atualizar item'
+      io_data_provider->read_entry_data(
+        IMPORTING
+          es_data = er_entity
       ).
 
-      RAISE EXCEPTION type /iwbep/cx_mgw_busi_exception
-        EXPORTING
-          message_container = lo_msg.
-    ENDIF.
+      er_entity-orderid = it_key_tab[ name = 'OrderID' ]-value.
+
+      " validações
+      IF er_entity-clientid = 0.
+        ld_error = 'X'.
+        lo_msg->add_message_text_only(
+          EXPORTING
+            iv_msg_type = 'E'
+            iv_msg_text = 'Cliente vazio'
+        ).
+      ENDIF.
+
+      IF er_entity-totalorder < 10.
+        ld_error = 'X'.
+        lo_msg->add_message(
+          EXPORTING
+            iv_msg_type   = 'E'
+            iv_msg_id     = 'ZOV'
+            iv_msg_number = 1
+            iv_msg_v1     = 'R$ 10,00'
+            iv_msg_v2     = |{ er_entity-orderid }|
+        ).
+      ENDIF.
+
+      IF ld_error = 'X'.
+        RAISE EXCEPTION TYPE /iwbep/cx_mgw_busi_exception
+          EXPORTING
+            message_container = lo_msg
+            http_status_code  = 500.
+      ENDIF.
+
+      UPDATE zovheader
+         SET clientid   = er_entity-clientid
+             totalitens = er_entity-totalitens
+             totalfrete = er_entity-totalfrete
+             totalorder = er_entity-totalorder
+             status     = er_entity-status
+       WHERE orderid    = er_entity-orderid.
+
+      IF sy-subrc <> 0.
+        lo_msg->add_message_text_only(
+          EXPORTING
+            iv_msg_type = 'E'
+            iv_msg_text = 'Erro ao atualizar ordem'
+        ).
+
+        RAISE EXCEPTION type /iwbep/cx_mgw_busi_exception
+          EXPORTING
+            message_container = lo_msg.
+      ENDIF.
   endmethod.
 
 
@@ -356,7 +391,7 @@ CLASS ZCL_ZOV_DPC_EXT IMPLEMENTATION.
       RAISE EXCEPTION type /iwbep/cx_mgw_busi_exception
         EXPORTING
           message_container = lo_msg.
-  ENDIF.
+    ENDIF.
   endmethod.
 
 
@@ -613,4 +648,39 @@ method /IWBEP/IF_MGW_APPL_SRV_RUNTIME~CREATE_DEEP_ENTITY.
         cr_data = er_deep_entity.
 
   endmethod.
+
+
+method /IWBEP/IF_MGW_APPL_SRV_RUNTIME~EXECUTE_ACTION.
+  DATA: ld_orderid  TYPE zovheader-orderid.
+  DATA: ld_status   TYPE zovheader-status.
+  DATA: lt_bapiret2 TYPE STANDARD TABLE OF zcl_zov_mpc_ext=>Mensagem2.
+  DATA: ls_bapiret2 TYPE zcl_zov_mpc_ext=>Mensagem2.
+
+  IF iv_action_name = 'ZFI_UPDATE_STATUS'.
+    ld_orderid = it_parameter[ name = 'ID_ORDERID' ]-value.
+    ld_status  = it_parameter[ name = 'ID_STATUS' ]-value.
+
+    UPDATE zovheader
+       SET status = ld_status
+     WHERE orderid = ld_orderid.
+
+    IF sy-subrc = 0.
+      CLEAR ls_bapiret2.
+      ls_bapiret2-tipo    = 'S'.
+      ls_bapiret2-mensagem = 'Status atualizado'.
+      APPEND ls_bapiret2 TO lt_bapiret2.
+    ELSE.
+      CLEAR ls_bapiret2.
+      ls_bapiret2-tipo    = 'E'.
+      ls_bapiret2-mensagem = 'Erro ao atualizar status'.
+      APPEND ls_bapiret2 TO lt_bapiret2.
+    ENDIF.
+  ENDIF.
+
+  CALL METHOD me->copy_data_to_ref
+    EXPORTING
+      is_data = lt_bapiret2
+    CHANGING
+      cr_data = er_data.
+endmethod.
 ENDCLASS.
